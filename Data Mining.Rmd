@@ -1,0 +1,681 @@
+---
+title: "Veri Madenciligi Vize"
+author: "Yasemin Hizarci 121516005"
+date: "12 12 2020"
+output:
+   html_document:
+     highlight: haddock
+---
+
+<style type="text/css">
+body,td {
+  font-size: 12pt;
+}
+
+h1.title {
+color:maroon;
+font-size:24pt;
+font-weight:600;
+}
+h1 {
+color:maroon;
+font-size:18pt;
+font-weight:600;
+}
+h2 {
+color:maroon;
+font-size:15pt;
+font-weight:600;
+}
+h3 {
+color:maroon;
+font-size:13pt;
+font-weight:600;
+}
+
+</style>
+
+
+```{css,echo=FALSE}
+.watch-out {
+  background-color:#FFCCFF;
+ 
+  font-weight: bold;
+}
+.watch-out1 {
+  background-color:#CCFFCC;
+  font-weight: bold;
+}
+
+
+```
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(class.source="watch-out",class.output="watch-out1")
+```
+
+
+
+# YAPAY SINIR AGLARI UYGULAMASI (Artificial Neural Network)
+
+
+```{r echo=FALSE, fig.align='center', fig.cap='Yapay Zeka', message=FALSE, out.width='75%'}
+knitr::include_graphics('C:/Users/yasem/OneDrive/Belgeler/images/yapayzeka.jpg')
+
+```
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(tidyverse)
+library(e1071)
+library(neuralnet)
+library(caret)
+```
+
+```{r}
+
+Balik<-read.table(file="C:/Users/yasem/OneDrive/Belgeler/datas/fish.csv",
+                          header=TRUE,sep=",")
+
+head(Balik)
+```
+
+## Veri Setinin Tanitilmasi:
+
+Bu veri seti, balik pazari satislarinda yaygin olarak kullanilan 7 farkli balik turunun kaydidir.
+
+**Species**:Balik turlerinin adi
+
+**Weight**: *Gram cinsinden balik agirligi*
+
+**Length 1**: *Cm cinsinden dikey uzunluk*
+
+**Length2**: *Cm cinsinden capraz uzunluk*
+
+**Length3**: *Cm cinsinden capraz uzunluk*
+
+**Height**: *Cm cinsinden yukseklik*
+
+**Width**: *Cm cinsinden capraz genislik*
+
+
+**Yanit Degiskeni**: Weight degiskeni yanit degiskeni olarak alinacaktir.Bu degisken gram cinsinden balik agirligini gostermektedir.
+
+**Veri setinin amaci**: Bagimsiz degiskenler kullanilarak baliklarin agirliklarinin tahmin edilmesi.
+
+
+Numeric degiskenlerle islem yapmak istenildiginden karakter degiskeni olan species degiskeni veriden cikariliyor.
+
+```{r}
+Balik<-dplyr::select(Balik, -Species)
+head(Balik)
+dim(Balik)
+```
+
+Veride missing gozlem olup olmadigini kontrol edelim.
+
+```{r}
+set.seed(123)
+data <- Balik
+
+apply(data,2,function(x) sum(is.na(x)))
+```
+
+Hicbir degisken icin eksik gozlem yoktur.
+
+Verinin dagilimini ve yapisini bozmayan min-max normalization yapalim.
+Bu sekide scaled datasi olusturulacaktir.
+
+```{r}
+maxs <- apply(data, 2, max) #sutunlarin maksimum degerini verdi.
+mins <- apply(data, 2, min) #sutunlarin minimum degerlerini verdi.
+scaled <- as.data.frame(scale(data, center = mins, scale = maxs - mins))
+head(scaled)
+
+```
+
+
+```{r}
+index <- sample(1:nrow(data),round(0.75*nrow(data)))
+train_ <- scaled[index,] #verinin %75 lik kismi train olarak ayrildi.
+test_ <- scaled[-index,]#verinin %25 lik kismi test olarak ayrildi.
+```
+
+
+```{r}
+n <- names(train_) #traindeki degiskenlerin isimlerini aliyoruz.
+f <- as.formula(paste("Weight ~", paste(n[!n %in% "Weight"], collapse = " + ")))
+#weight degiskeni bagimli degisken olarak alindi ve 
+#weight degiskeni haricindeki degiskenler bagimsiz degisken olarak alindilar.
+nn <- neuralnet(f,data=train_,hidden=4,linear.output=T)
+
+```
+
+Tek katmandan olusan ve 4 noron sayisina sahip olan bir sinir agi olusturulacaktir.
+
+```{r}
+plot(nn,rep="best")
+
+pr.nn <- compute(nn,test_[,2:6]) #Weight disindaki degiskenler modele aliniyor.
+```
+
+Bagimli degisken min max normalization yapilmisa gore hesaplandi.Onu geri dondurmemiz gerekiyor.
+
+```{r}
+pr.nn_ <- pr.nn$net.result*(max(data$Weight)-min(data$Weight))+min(data$Weight) 
+#geri dondurduk. min-max ile carpip min ekledik.
+pr.nn_ #artik orijinal tahminlerdir. 
+
+```
+
+
+```{r}
+MSE.nn <- sum((data[-index,]$Weight - pr.nn_)^2)/nrow(test_) 
+#y - y sapkalarin karelerinin toplami bolu test in gozlem sayisi.
+MSE.nn
+```
+
+
+```{r}
+plot(data[-index,]$Weight,pr.nn_,col='black',bg="blueviolet",main='Real vs predicted NN',pch=23,cex=1.5)
+abline(0,1,lwd=2)
+```
+
+**Test verisinin gercek degerlerini x ekseni gostermektedir.Y ekseni ise ANN uzerinden tahmin edilen degerleri gosterir.**
+
+
+
+# YAPAY SINIR AGLARI ILE SINIFLANDIRMA
+
+```{r}
+
+kalp<-read.table(file="C:/Users/yasem/OneDrive/Belgeler/datas/heart.csv",
+                          header=TRUE,sep=",")
+head(kalp)
+dim(kalp)
+
+```
+
+## Verinin Tanitilmasi:
+
+Kalp Hastaligina dair bir veridir.
+
+**Age**=*Hastalarin yasini belirtmektedir*.
+
+**sex**=*Cinsiyeti belirtmektedir.(1:erkek;0:kadin)*
+
+**cp**=*Gogus agrisi tipini gostermektedir*.
+
+**trestbps**=*istirahat kan basinci(hastaneye kabulde mm Hg cinsinden)*
+
+**chol**=*Kolestrolu gostermektedir.(mg/dl)*
+
+**fbs**=*Aclik kan sekeri>120mg/dl (1:true;0:false)*
+
+**restecg**=*istirahat eletrokardiyografi sonuclari*
+
+**thalach**=*ulasilan max kalp atis hizi*
+
+**exang**=*egzersize bagli anjin (1:evet;0:hayir)*
+
+**oldpeak**=*egzersizin neden oldugu St depresyonu*
+
+**slope**=*st egimini belirtmektedir.*
+
+**ca**=*renklendirilen damar sayisi.*
+
+**Bagimli degisken**: **exang**
+
+Hastanin diger bilgilerini kullanarak egzersize bagli anjin yasayip yasamadigini tahmin edecegiz.
+
+exang:1=anjin var
+
+exang:0=anjin yok
+
+
+
+## Verinin duzenlenmesi
+
+Bagimli degiskenin kategorileri isimlendiriliyor.
+
+
+```{r}
+ kalp=kalp%>% mutate(
+         exang= case_when(exang==1~"anjinvar",
+                                    exang==0~"anjinyok"))
+deneme<-dplyr::select(kalp, "exang")
+head(deneme)
+
+
+
+```
+
+
+```{r}
+#Kulanmak istemedigim son iki degiskeni veriden cikariyorum.
+kalp<-dplyr::select(kalp,1:12) 
+str(kalp)
+```
+
+sex,cp,fbs,restecg,slope degiskenleri factor oldugu halde integer olarak gozukmektedir.
+
+Bu degiskenleri factor olarak degistirelim.
+
+```{r}
+faktorler=c("sex","cp","fbs","restecg","exang","slope")
+
+
+  kalp=kalp %>%mutate_at(faktorler, as.factor)
+str(kalp)
+
+```
+
+
+
+Veride missing gozlem olup olmadigini kontrol edelim.
+
+```{r}
+apply(kalp,2,function(x) sum(is.na(x)))
+```
+
+Veride eksik gozlem bulunmamaktadir.
+
+
+min-max normalizasyonunu numeric degiskenlere uygulamak daha dogrudur.Bu nedenle numeric degiskenler ve bagimli degisken ile yeni bir veri olusturuyorum.
+
+```{r}
+kalpveri=select(kalp,"age","trestbps","chol","thalach","oldpeak","exang")
+head(kalpveri)
+```
+
+
+
+
+```{r}
+maxs <- apply(kalpveri[ ,1:5], 2, max) #Sutunlarin maksimum degerini verir.
+mins <- apply(kalpveri[ ,1:5], 2, min) #Sutunlarin minimum degerini verir.
+scaled <- data.frame(as.data.frame(scale(kalpveri[,1:5], center = mins, scale = maxs-mins)),
+                     kalpveri$exang)
+```
+
+
+data frame kodu ile normalizasyon uygulanan numeric degiskenler ve kategorik olan bagimli degisken exang birlestirildi.
+
+Verinin %75 ini train olarak, geri kalan %25 ini ise test olarak ayiriyoruz.
+
+```{r}
+set.seed(150)
+index <- sample(1:nrow(kalpveri),0.75*nrow(kalpveri))
+train <- scaled[index,]
+test <- scaled[-index,]
+```
+
+Cikis katmanindaki noron sayisi, kac tane ikili ciktinin ogrenilmesi gerektigine baglidir. Bir siniflandirma
+probleminde, bu tipik olarak cikti kategorisindeki olasi degerlerin sayisidir. Bu amacla yanit degiskeni asagidaki gibi duzenleniyor.
+
+```{r}
+nntrain<-train
+# Binarize the categorical output
+nntrain <- cbind(nntrain, train$kalpveri.exang == 'anjinyok')
+nntrain <- cbind(nntrain, train$kalpveri.exang == 'anjinvar')
+names(nntrain)[7] <- 'anjinyok'
+names(nntrain)[8] <- 'anjinvar'
+head(nntrain)
+```
+
+Hidden noron sayisi ve katman sayisini belirlemek icin kullaniliyor. 
+
+Genel itibariyle degisken sayisinin 2/3 u noron sayisini verir. Veride kullanilan degisken sayisi 6 oldugundan noron sayisi 4 olarak kullanilacaktir.Tek katmanli bir sinir agi olusturulacaktir.
+
+Amac siniflandirma oldugundan(yanit degiskeni binary oldugundan) linear.output=FALSE giriliyor.
+
+```{r}
+set.seed(200)
+ANN <- neuralnet(anjinyok + anjinvar ~ age+trestbps+chol+thalach+oldpeak,
+                 data=nntrain, hidden=4,linear.output=F)
+plot(ANN,rep="best")
+```
+
+Prediction asamasinda geri donus yapilmiyor cunku yanit degiskenine normalizasyon uygulanmadi.
+
+Burada tahmin degerleri 0.5 ten buyuk ise "anjinyok",degil ise "anjinvar" olacaktir.
+
+```{r}
+pred = ifelse((predict(ANN,test[,-6])>0.5)[,1]=="TRUE","anjinyok","anjinvar")
+```
+
+
+Simdi de Confusion Matrixi elde edelim
+
+
+```{r}
+cm <- confusionMatrix(table(test[,6], pred))
+cm
+```
+
+Sonuclara bakildiginda 13 gozlemin anjin var iken dogru sekilde tahmin edildigi goruluyor.
+
+42 gozlem ise anjin yok iken dogru sekilde tahmin edilmistir.
+
+10 gozlem "anjinyok" iken "anjinvar" olarak yanlis sekilde tahmin edilmistir.
+
+11 gozlem ise "anjinvar" iken "anjinyok" olarak tahmin edilmistir.
+
+Bu durumda 76 gozlemin 55 tanesinin dogru tahmin edildigi goruluyor.
+
+Dogru tahmin orani Accuracy degerinden de anlasilabilecegi gibi %72.37 dir.
+
+
+Bu matrisi daha gorsel hale getirelim.
+
+```{r}
+draw_confusion_matrix <- function(cm) {
+layout(matrix(c(1,1,2)))
+par(mar=c(2,2,2,2))
+plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+title('Confusion Matrix', cex.main = 2)
+rect(150, 430, 240, 370, col = '#9933CC')
+text(195, 435, 'Negatif', cex = 1.2)
+rect(250, 430, 340, 370, col = '#0000CC')
+text(295, 435, 'Pozitif', cex = 1.2)
+text(125, 370, 'Predicted', cex = 1.3, srt = 90, font = 2)
+text(245, 450, 'Actual', cex=1.3, font=2)
+rect(150, 305, 240, 365, col = '#0000CC')
+rect(250, 305, 340, 365, col = '#9933CC')
+text(140, 400, 'Negatif', cex = 1.2, srt = 90)
+text(140, 335, 'Pozitif', cex = 1.2, srt = 90)
+res <- as.numeric(cm$table)
+text(195, 400, res[1], cex = 1.6, font = 2, col = 'white')
+text(195, 335, res[2], cex = 1.6, font = 2, col = 'white')
+text(295, 400, res[3], cex = 1.6, font = 2, col = 'white')
+text(295, 335, res[4], cex = 1.6, font = 2, col = 'white')
+plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt = 'n', yaxt = 'n')
+text(10, 85, names(cm$byClass[1]), cex=1.2, font=2)
+text(10, 70, round(as.numeric(cm$byClass[1]), 3), cex=1.2)
+text(30, 85, names(cm$byClass[2]), cex=1.2, font=2)
+text(30, 70, round(as.numeric(cm$byClass[2]), 3), cex=1.2)
+3
+text(50, 85, names(cm$byClass[5]), cex=1.2, font=2)
+text(50, 70, round(as.numeric(cm$byClass[5]), 3), cex=1.2)
+text(70, 85, names(cm$byClass[6]), cex=1.2, font=2)
+text(70, 70, round(as.numeric(cm$byClass[6]), 3), cex=1.2)
+text(90, 85, names(cm$byClass[7]), cex=1.2, font=2)
+text(90, 70, round(as.numeric(cm$byClass[7]), 3), cex=1.2)
+text(30, 35, names(cm$overall[1]), cex=1.5, font=2)
+text(30, 20, round(as.numeric(cm$overall[1]), 3), cex=1.4)
+text(70, 35, names(cm$overall[2]), cex=1.2, font=2)
+text(70, 20, round(as.numeric(cm$overall[2]), 3), cex=1.4)
+}
+draw_confusion_matrix(cm)
+```
+
+# SVM UYGULAMASI
+
+
+
+```{r echo=FALSE, fig.align='center', fig.cap='SVM', out.width='75%'}
+knitr::include_graphics('C:/Users/yasem/OneDrive/Belgeler/images/svm.png')
+
+```
+
+
+
+
+```{r}
+head(kalp)
+str(kalp)
+```
+
+## Uygulama
+
+```{r}
+dim(kalp)
+```
+
+Verinin 303 tane gozlemi vardir.Gozlemlerin %75 ini train,%25 ini test olarak aliyorum.
+
+
+```{r message=FALSE, warning=FALSE}
+set.seed(150)
+index <- sample(1:nrow(kalp),0.75*nrow(kalp))
+train <- kalp[index,] 
+test <-  kalp[-index,]
+```
+
+
+### Kernel:linear icin tahmin
+
+Yanit degiskeni faktor oldugu icin **type = 'C-classification'** olarak kullanilmalidir. Kernel ise default olarak radialdir,biz ilk olarak linear olarak aliyoruz.
+
+```{r message=FALSE, warning=FALSE}
+classifier1 = svm(formula = exang ~ .,
+data = train,scale=TRUE,
+type = 'C-classification',
+kernel = 'linear')
+```
+
+Test setindeki tahminleri, yanit degiskenini disarda birakarak bagimsiz degiskenler ile hesaplamaliyiz.
+exang degiskeni 9. sutunda oldugu icin.Test setinden 9. sutunu cikariyoruz.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(12)
+y_pred1 = predict(classifier1, newdata = test[-9])
+```
+
+
+Simdi **_Confusion Matrix_**'i olusturalim
+
+```{r message=FALSE, warning=FALSE}
+library(caret)
+set.seed(12)
+y_pred1 = predict(classifier1, newdata = test[-9])
+
+cm <- confusionMatrix(table(test[,9], y_pred1))
+cm
+```
+
+Burada accuracy degeri **0.76** yani dogru tahmin oranimiz **%76**'dir. SVM'nin basarisi secilen parametrelere cok baglidir. Bu yuzden bu parametrelerin secimi icin cross validation kullanilmasi daha dogru olur. Bu amacla tune.svm komutunu kullanacagiz.Ilk olarak linear kernel ile devam edip sadece cost parametresi icin cross validation yapalim.
+
+### Kernel: linear icin cost degeri secilerek yapilan tahmin
+
+```{r message=FALSE, warning=FALSE}
+set.seed(12)
+tune.out<-tune.svm(exang~ ., data = train,kernel='linear',cost= c(0.5,1,5,10))
+summary(tune.out)
+```
+
+Bizim belirledigimiz cost degerlerinden en dusuk cross validated siniflandirma hatasini veren parametrenin cost=0.5 oldugu gorulmektedir.best performance ise 0.2553360 dur.Bu deger cross validated siniflandirma hatasidir ve belirledigimiz diger cost degerlerine gore en dusuk olandir,bu nedenle de en iyisidir.
+
+simdi de cross validation ile belirledigimiz cost parametresini kullanarak SVM siniflandiricimizi elde edelim:
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+classifier2 = svm(formula = exang ~ .,
+data = train,scale=TRUE,
+type = 'C-classification', cost=tune.out$best.parameters[1],
+kernel = 'linear')
+```
+
+Test setimizdeki tahminleri hesaplayalim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+y_pred2 = predict(classifier2, newdata = test[-9])
+
+```
+
+simdi **_Confusion Matrix_**'i olusturalim
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+
+cm <- confusionMatrix(table(test[,9], y_pred2))
+cm
+```
+
+Burada accuracy degerimiz *0.77* dir.Bu dogru tahmin oranimizdir.Goruluyor ki tahmin performansimiz artti. 
+
+### Radial kernel ile tahmin
+
+
+simdi **radial kernel** kullanarak cross validated tahmin performansimizi inceleyelim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+tune.out<-tune.svm(exang ~ ., data = train,kernel='radial', gamma = c(0,0.5,1,2,5),
+cost = 10^seq(1,-1,by=-.1))
+summary(tune.out)
+```
+
+Best performance degeri 0.277 dir.Bu deger bizim belirledigimiz cost ve gamma degerleri icin en kucuk cross validated siniflandirma hatasidir ve gamma 0.5 ve cost 1.258925 degerine aittir.Goruluyor ki Kernel olarak radial basis kullanimi Cross validated tahmin performans degerini yukseltti(0.25 idi).
+
+Buradaki _dispersion_ sutunu,ilgili parametre secimleri icin foldlardan elde edilen siniflandirma hatalarinin standart sapmasini gostermektedir. 
+
+
+Bu parametreleri ve radial kernel'i kullanarak siniflandiricimizi kuralim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+classifier3 = svm(formula = exang ~ .,
+data = train,scale=TRUE,
+type = 'C-classification',
+kernel = 'radial',cost=tune.out$best.parameters[2],gamma=tune.out$best.parameters[1])
+```
+
+Simdi de kurdugumuz SVM siniflandiricinin performansina test verimiz uzerinde bakalim.
+
+```{r message=FALSE, warning=FALSE}
+set.seed(15)
+y_pred3 = predict(classifier3, newdata = test[-9])
+```
+
+Ve **_Confusion Matrix_**'i olusturalim
+
+```{r message=FALSE, warning=FALSE}
+
+cm <- confusionMatrix(table(test[,9], y_pred3))
+cm
+```
+
+Burada accuracy degerimiz *0.72* yani dogru tahmin oranimiz *%72*'dir.Radial basis function ve cross validation ile secilen parametrelerin kullanimi ile tahmin performansimiz **dusmustur**.
+
+### En iyi modelin belirlenmesi icin svm cross validation
+
+```{r, message=FALSE, warning=FALSE}
+# En iyi Modelin Belirlenmesi icin SVM cross validation
+set.seed(15)
+cv.accuracy1 <- NULL
+cv.accuracy2 <- NULL
+cv.accuracy3 <- NULL
+k <- 13
+
+for(i in 1:k){
+    index <- sample(1:nrow(kalp),round(0.75*nrow(kalp)))
+    train.cv <- kalp[index,]
+    test.cv <- kalp[-index,]
+    
+    classifier1 = svm(formula = exang ~ .,
+data = train.cv, scale=TRUE,
+type = 'C-classification',
+kernel = 'linear')
+ y_pred1 = predict(classifier1, newdata = test.cv[-9])
+cv.accuracy1[i]<-confusionMatrix(table(test.cv[,9], y_pred1))$overall[1]
+
+    classifier2 = svm(formula = exang ~ .,
+data = train.cv, scale=TRUE,
+type = 'C-classification', cost=0.5,
+kernel = 'linear')
+y_pred2 = predict(classifier2, newdata = test.cv[-9])
+cv.accuracy2[i]<-confusionMatrix(table(test.cv[,9], y_pred2))$overall[1]
+
+    classifier3 = svm(formula = exang ~ .,
+data = train.cv, scale=TRUE,
+type = 'C-classification',
+kernel = 'radial',cost=1.258925,gamma=0.5)
+y_pred3 = predict(classifier3, newdata = test.cv[-9])
+cv.accuracy3[i]<-confusionMatrix(table(test.cv[,9], y_pred3))$overall[1]
+  }
+```
+
+Ortalama accuracylere bakarsak
+
+```{r, message=FALSE, warning=FALSE}
+mean(cv.accuracy1)
+mean(cv.accuracy2)
+mean(cv.accuracy3)
+```
+
+Denenen yontemlerin en iyi sonuc vereninin 2. yontem oldugu goruluyor.Yani kernel=linear,cost=0.5 iken daha iyi sonuc aliyoruz.Bu sonuca accuracy degerlerine bakarak varabiliriz.
+
+### Yas ve max kalp atimi degiskenleri ile exang degiskeni tahmini:
+
+Simdi buldugumuz en iyi tahmin yontemi ile;
+(kernel=linear,cost=0.5 secerek)  tahmin yapalim.
+
+age=Yas
+
+thalach=ulasilan max kalp atisi
+
+```{r}
+classifier4 = svm(formula = exang ~ age+thalach, 
+                 data = train,scale=TRUE,
+                 type = 'C-classification', cost=0.5,
+                 kernel = 'linear') 
+y_pred = predict(classifier4, newdata = test[-9]) 
+
+cm = table(test[,9], y_pred) 
+cm
+accuracylinear=(cm[1,1]+cm[2,2])/dim(test)[1]
+accuracylinear
+
+
+```
+
+Anjin var iken dogru tahmin sayisi 10 dur.
+
+Anjin yok iken dogru tahmin sayisi 48 dir.
+
+anjin yok iken 4 gozlem var olarak yanlis tahmin edilmistir.
+
+anjin var iken 14 gozlem yok olarak tahmin edilmistir.
+
+76 gozlemin 58 i dogru tahmin edilmistir.
+Dogru tahmin orani %76 dir.
+
+Bunu bir de grafik uzerinde gorelim.
+
+
+```{r}
+plot(classifier4,test,age~thalach)
+```
+
+Sari alan anjin olan gozlemler icindir.
+
+Sari alandaki siyah gozlemler dogru tahminlerdir.Anjin var iken var olarak tahmin edilen gozlemlerdir(10 tane)
+
+Sari alandaki kirmizi gozlemler yanlis tahminlerdir.Anjin yok iken var olarak tahmin edilmislerdir(4 tane)
+
+Kirmizi alan anjin olmayan gozlemler icin olan kisimdir.
+
+Kirmizi noktalar dogru tahminlerdir ve anjin yok iken yok olarak tahmin edilmislerdir.
+
+Siyah noktalar ise aslinda anjin olan gozlemlerdir fakat anjin yok olarak tahmin edilmislerdir.(14)
+
+
+## Exang degiskeni icin ysa ve svm tahmin sonuclarinin karsilastirmasi:
+
+
+Exang degiskeni siniflandirma tahmini ilk olarak Yapay Sinir Agi yontemi ile yapilmis ve dogru tahmin orani %72.37 olmustur.Daha sonra Svm yontemi ile tahmin yapilmistir.Svm yontemindeki en kotu modelde(Kernel=radial iken) dogru tahmin orani Yapay sinir agi yontemindekine benzerdir ancak Kernel lineer iken sonuc cok daha iyi olmaktadir(%76-%77).Svm de sectigimiz yontemde(kernel=lineer,cost=0.5 iken) tahmin yapilmis ve dogru tahmin orani da % 76 .3 olmustur.
+Bu durumda exang degiskeni siniflandirma tahmini icin svm yonteminin kullanilmasinin daha dogru oldugu sonucuna varilabilir.
+
+
+
+
+
+.
+
+
+
+
+.
